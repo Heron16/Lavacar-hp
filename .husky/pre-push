@@ -19,4 +19,4 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "✅ Todos os testes E2E passaram. Push liberado."
+echo "✅ Todos os testes E2E passaram. Push ."
