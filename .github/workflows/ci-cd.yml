@@ -1,0 +1,205 @@
+name: AquaWash CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+# ─────────────────────────────────────────────────────────────
+# Variáveis de ambiente globais
+# ─────────────────────────────────────────────────────────────
+env:
+  NODE_VERSION: "20"
+  REGISTRY: ghcr.io
+  IMAGE_BACKEND: ghcr.io/${{ github.repository }}/backend
+  IMAGE_FRONTEND: ghcr.io/${{ github.repository }}/frontend
+
+# ─────────────────────────────────────────────────────────────
+# JOB 1 — Lint & Type Check
+# ─────────────────────────────────────────────────────────────
+jobs:
+  lint:
+    name: 🔍 Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: TypeScript type check (backend)
+        run: npx tsc --noEmit
+        working-directory: backend
+
+      - name: Install frontend dependencies
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: TypeScript type check (frontend)
+        run: npx tsc --noEmit
+        working-directory: frontend
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2 — Testes Unitários (Backend)
+  # ─────────────────────────────────────────────────────────────
+  test-unit:
+    name: 🧪 Testes Unitários
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Run unit tests with coverage
+        run: npm run test:coverage
+        working-directory: backend
+        env:
+          NODE_ENV: test
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage/
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 3 — Build das Imagens Docker
+  # ─────────────────────────────────────────────────────────────
+  build:
+    name: 🐳 Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test-unit
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login no Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push imagem Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.IMAGE_BACKEND }}:latest
+            ${{ env.IMAGE_BACKEND }}:${{ github.sha }}
+
+      - name: Build & Push imagem Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.IMAGE_FRONTEND }}:latest
+            ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
+          build-args: |
+            VITE_API_URL=${{ secrets.VITE_API_URL }}
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 4 — Deploy (apenas branch main)
+  # ─────────────────────────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy Produção
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /opt/aquawash
+
+            # Atualiza imagens
+            docker compose pull backend frontend
+
+            # Deploy com zero-downtime:
+            # 1. Sobe novo backend
+            docker compose up -d --no-deps backend
+
+            # 2. Aguarda health check
+            sleep 15
+            docker compose ps backend | grep "healthy" || exit 1
+
+            # 3. Sobe novo frontend
+            docker compose up -d --no-deps frontend
+
+            # 4. Reload Nginx (sem downtime)
+            docker compose exec nginx nginx -s reload
+
+            echo "✅ Deploy concluído: ${{ github.sha }}"
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 5 — Testes E2E pós-deploy (apenas main)
+  # ─────────────────────────────────────────────────────────────
+  e2e:
+    name: 🎭 Testes E2E
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Playwright
+        run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: Run E2E tests
+        run: npx playwright test
+        working-directory: e2e
+        env:
+          BASE_URL: ${{ secrets.PRODUCTION_URL }}
+          TEST_USER_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
