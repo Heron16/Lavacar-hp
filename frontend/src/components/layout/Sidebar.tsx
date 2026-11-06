@@ -22,20 +22,26 @@ const navAdmin: ItemNav[] = [
   { to: '/admin/agendamentos', label: 'Agendamentos', icon: '📅' },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  onNavClick?: () => void;
+}
+
+export function Sidebar({ onNavClick }: SidebarProps) {
   const { usuario } = useAuth();
   const itens = usuario?.perfil === 'admin' ? navAdmin : navCliente;
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-100 min-h-screen p-4">
+    <aside className="w-64 bg-white border-r border-gray-100 min-h-full p-4 shadow-lg lg:shadow-none">
       <div className="mb-6 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center flex-shrink-0">
             <span className="text-white font-bold">{usuario?.nome[0].toUpperCase()}</span>
           </div>
-          <div>
-            <p className="font-semibold text-gray-900 text-sm">{usuario?.nome}</p>
-            <p className="text-xs text-gray-500">{usuario?.perfil === 'admin' ? 'Administrador' : 'Cliente'}</p>
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 text-sm truncate">{usuario?.nome}</p>
+            <p className="text-xs text-gray-500">
+              {usuario?.perfil === 'admin' ? 'Administrador' : 'Cliente'}
+            </p>
           </div>
         </div>
       </div>
@@ -46,6 +52,7 @@ export function Sidebar() {
             key={item.to}
             to={item.to}
             end={item.to === '/dashboard' || item.to === '/admin'}
+            onClick={onNavClick}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
