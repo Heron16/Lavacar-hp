@@ -14,8 +14,8 @@ export interface Usuario {
   id: string;
   nome: string;
   email: string;
-  cpf?: string;
   telefone?: string;
+  cpf?: string;
   perfil: PerfilUsuario;
 }
 
@@ -75,7 +75,6 @@ export interface FormCadastro {
   email: string;
   senha: string;
   confirmarSenha: string;
-  cpf: string;
 }
 
 export interface FormEdicaoUsuario {
