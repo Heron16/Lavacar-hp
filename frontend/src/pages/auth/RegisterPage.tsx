@@ -4,10 +4,7 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
-import {
-  validateEmail, validateCPF, validatePassword,
-  getPasswordStrength, getPasswordErrors, formatCPF,
-} from '../../utils/validators';
+import { validateEmail, getPasswordStrength, getPasswordErrors } from '../../utils/validators';
 import { FormCadastro, ErroApi } from '../../types';
 
 type ErrosCampos = Partial<Record<keyof FormCadastro, string>>;
@@ -20,14 +17,13 @@ const configForca = {
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState<FormCadastro>({ nome: '', email: '', senha: '', confirmarSenha: '', cpf: '' });
+  const [form, setForm] = useState<FormCadastro>({ nome: '', email: '', senha: '', confirmarSenha: '' });
   const [erros, setErros] = useState<ErrosCampos>({});
   const [tocados, setTocados] = useState<Partial<Record<keyof FormCadastro, boolean>>>({});
   const [loading, setLoading] = useState(false);
 
   const set = (campo: keyof FormCadastro) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const valor = campo === 'cpf' ? formatCPF(e.target.value) : e.target.value;
-    setForm((prev) => ({ ...prev, [campo]: valor }));
+    setForm((prev) => ({ ...prev, [campo]: e.target.value }));
     if (erros[campo]) setErros((prev) => ({ ...prev, [campo]: undefined }));
   };
 
@@ -37,12 +33,6 @@ export function RegisterPage() {
       case 'email':
         if (!valor) return 'E-mail é obrigatório';
         return !validateEmail(valor) ? 'Formato de e-mail inválido' : undefined;
-      case 'cpf': {
-        if (!valor) return 'CPF é obrigatório';
-        const digitos = valor.replace(/\D/g, '');
-        if (digitos.length < 11) return 'CPF incompleto — digite os 11 dígitos';
-        return !validateCPF(valor) ? 'CPF inválido — verifique os números' : undefined;
-      }
       case 'senha': {
         if (!valor) return 'Senha é obrigatória';
         const errs = getPasswordErrors(valor);
@@ -59,11 +49,11 @@ export function RegisterPage() {
   };
 
   const validar = (): boolean => {
-    const campos: (keyof FormCadastro)[] = ['nome', 'email', 'cpf', 'senha', 'confirmarSenha'];
+    const campos: (keyof FormCadastro)[] = ['nome', 'email', 'senha', 'confirmarSenha'];
     const novosErros: ErrosCampos = {};
     campos.forEach((c) => { const e = validarCampo(c, form[c]); if (e) novosErros[c] = e; });
     setErros(novosErros);
-    setTocados({ nome: true, email: true, cpf: true, senha: true, confirmarSenha: true });
+    setTocados({ nome: true, email: true, senha: true, confirmarSenha: true });
     return Object.keys(novosErros).length === 0;
   };
 
@@ -72,15 +62,11 @@ export function RegisterPage() {
     if (!validar()) return;
     setLoading(true);
     try {
-      await api.post('/users/cadastrar', {
-        nome: form.nome, email: form.email,
-        senha: form.senha, cpf: form.cpf.replace(/\D/g, ''),
-      });
+      await api.post('/users/cadastrar', { nome: form.nome, email: form.email, senha: form.senha });
       toast.success('Cadastro realizado! Faça login.');
       navigate('/login');
-    } catch (err: ErroApi) {
-      const msg = err?.response?.data?.mensagem || 'Erro ao cadastrar';
-      toast.error(msg);
+    } catch (err: unknown) {
+      toast.error((err as ErroApi)?.response?.data?.mensagem || 'Erro ao cadastrar');
     } finally {
       setLoading(false);
     }
@@ -108,11 +94,6 @@ export function RegisterPage() {
             <div>
               <Input label="E-mail" type="email" placeholder="nome@dominio.com" value={form.email} onChange={set('email')} onBlur={handleBlur('email')} error={erros.email} />
               {tocados.email && !erros.email && form.email && <p className="text-xs text-green-600 mt-1">✓ E-mail válido</p>}
-            </div>
-
-            <div>
-              <Input label="CPF" placeholder="000.000.000-00" value={form.cpf} onChange={set('cpf')} onBlur={handleBlur('cpf')} error={erros.cpf} maxLength={14} />
-              {tocados.cpf && !erros.cpf && form.cpf && <p className="text-xs text-green-600 mt-1">✓ CPF válido</p>}
             </div>
 
             <div>
