@@ -1,0 +1,1078 @@
+openapi: 3.0.3
+
+info:
+  title: AquaWash API
+  description: |
+    API REST do sistema de agendamento de lavagem de veículos **AquaWash**.
+
+    ## Autenticação
+    A maioria dos endpoints requer um token JWT no header:
+    ```
+    Authorization: Bearer <token>
+    ```
+    O token é obtido via `POST /api/auth/login` e expira em **7 dias**.
+
+    ## Perfis de Acesso
+    - **cliente** — acessa seus próprios dados e cria agendamentos.
+    - **admin** — acesso total: gerencia usuários, serviços, veículos e agendamentos.
+
+    ## Paginação
+    Endpoints de listagem aceitam os query params `pagina` (default: 1) e `limite` (default: 10, máx: 50).
+    A resposta segue o formato:
+    ```json
+    { "dados": [], "total": 0, "pagina": 1, "totalPaginas": 1 }
+    ```
+  version: 1.0.0
+  contact:
+    name: Equipe AquaWash
+
+servers:
+  - url: http://localhost:3001
+    description: Desenvolvimento local (backend direto)
+  - url: https://meuapp.local
+    description: Ambiente Docker com Nginx + HTTPS
+
+tags:
+  - name: Auth
+    description: Autenticação de usuários
+  - name: Usuários
+    description: Cadastro e gerenciamento de usuários
+  - name: Veículos
+    description: Gerenciamento de veículos dos clientes
+  - name: Serviços
+    description: Catálogo de serviços do lava-rápido
+  - name: Agendamentos
+    description: Criação e gestão de agendamentos
+
+# ─────────────────────────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────────────────────────
+paths:
+
+  # ── AUTH ────────────────────────────────────────────────────
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login de usuário
+      description: Autentica o usuário com e-mail e senha. Retorna um token JWT e os dados do usuário.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: joao@email.com
+              senha: Senha@123
+      responses:
+        '200':
+          description: Login realizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── USUÁRIOS ────────────────────────────────────────────────
+  /api/users/cadastrar:
+    post:
+      tags: [Usuários]
+      summary: Cadastrar novo usuário
+      description: Cria uma conta de cliente. Valida e-mail (regex), CPF (dígitos verificadores) e força de senha.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CadastroUsuarioRequest'
+            example:
+              nome: João Silva
+              email: joao@email.com
+              cpf: "12345678909"
+              senha: Senha@123
+      responses:
+        '201':
+          description: Usuário criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioCriado'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/users:
+    get:
+      tags: [Usuários]
+      summary: Listar todos os usuários (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/Limite'
+      responses:
+        '200':
+          description: Lista paginada de usuários
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginacaoUsuarios'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/users/{id}:
+    get:
+      tags: [Usuários]
+      summary: Buscar usuário por ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Dados do usuário
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usuario'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Usuários]
+      summary: Atualizar dados do usuário
+      description: Cliente pode atualizar seus próprios dados (nome, telefone, senha). E-mail não pode ser alterado.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtualizacaoUsuarioRequest'
+      responses:
+        '200':
+          description: Usuário atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usuario'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      tags: [Usuários]
+      summary: Excluir usuário (admin)
+      description: Remove o usuário e todos os seus dados em cascata (veículos, agendamentos).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204':
+          description: Usuário excluído com sucesso
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── VEÍCULOS ────────────────────────────────────────────────
+  /api/vehicles/meus:
+    get:
+      tags: [Veículos]
+      summary: Listar veículos do cliente autenticado
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/Limite'
+      responses:
+        '200':
+          description: Lista paginada de veículos do cliente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginacaoVeiculos'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/vehicles:
+    get:
+      tags: [Veículos]
+      summary: Listar todos os veículos (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/Limite'
+      responses:
+        '200':
+          description: Lista paginada de todos os veículos com dados do proprietário
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginacaoVeiculosAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Veículos]
+      summary: Cadastrar veículo
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriarVeiculoRequest'
+            example:
+              marca: Toyota
+              modelo: Corolla
+              ano: 2022
+              placa: ABC1D23
+              cor: Prata
+              tipo: carro
+      responses:
+        '201':
+          description: Veículo criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Veiculo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/vehicles/{id}:
+    put:
+      tags: [Veículos]
+      summary: Atualizar veículo
+      description: Cliente pode atualizar dados do próprio veículo, exceto a placa.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtualizarVeiculoRequest'
+      responses:
+        '200':
+          description: Veículo atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Veiculo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Veículos]
+      summary: Excluir veículo
+      description: Cliente exclui o próprio veículo; admin pode excluir qualquer veículo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204':
+          description: Veículo excluído com sucesso
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── SERVIÇOS ────────────────────────────────────────────────
+  /api/services:
+    get:
+      tags: [Serviços]
+      summary: Listar serviços ativos (público)
+      description: Retorna serviços ativos. Aceita query param `tipoVeiculo` para filtrar por compatibilidade.
+      parameters:
+        - name: tipoVeiculo
+          in: query
+          description: Filtra serviços compatíveis com o tipo de veículo
+          schema:
+            $ref: '#/components/schemas/TipoVeiculo'
+      responses:
+        '200':
+          description: Lista de serviços ativos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Servico'
+
+    post:
+      tags: [Serviços]
+      summary: Criar serviço (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriarServicoRequest'
+            example:
+              nome: Lavagem Completa
+              descricao: Lavagem externa e interna com aspiração
+              preco: 89.90
+              duracao: 60
+              tiposVeiculo: carro,suv
+      responses:
+        '201':
+          description: Serviço criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Servico'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/services/admin/todos:
+    get:
+      tags: [Serviços]
+      summary: Listar todos os serviços (admin)
+      description: Retorna todos os serviços, incluindo inativos.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/Limite'
+      responses:
+        '200':
+          description: Lista paginada de todos os serviços
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginacaoServicos'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/services/{id}:
+    put:
+      tags: [Serviços]
+      summary: Atualizar serviço (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtualizarServicoRequest'
+      responses:
+        '200':
+          description: Serviço atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Servico'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Serviços]
+      summary: Excluir serviço (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204':
+          description: Serviço excluído com sucesso
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── AGENDAMENTOS ────────────────────────────────────────────
+  /api/appointments/slots:
+    get:
+      tags: [Agendamentos]
+      summary: Listar slots disponíveis para uma data
+      description: Retorna os horários disponíveis para agendamento em uma data específica, considerando o serviço selecionado e agendamentos existentes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: data
+          in: query
+          required: true
+          description: Data no formato YYYY-MM-DD
+          schema:
+            type: string
+            format: date
+            example: "2026-10-15"
+        - name: servicoId
+          in: query
+          required: true
+          description: UUID do serviço
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lista de slots disponíveis (formato YYYY-MM-DDTHH:MM)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  example: "2026-10-15T09:00"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/appointments/meus:
+    get:
+      tags: [Agendamentos]
+      summary: Listar agendamentos do cliente autenticado
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/Limite'
+      responses:
+        '200':
+          description: Lista paginada de agendamentos do cliente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginacaoAgendamentos'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/appointments:
+    get:
+      tags: [Agendamentos]
+      summary: Listar todos os agendamentos (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/Limite'
+      responses:
+        '200':
+          description: Lista paginada de todos os agendamentos com dados de usuário, veículo e serviço
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginacaoAgendamentosAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Agendamentos]
+      summary: Criar agendamento
+      description: |
+        Cria um novo agendamento. O backend valida:
+        - Horário de funcionamento (Seg–Sex 08–12/13:30–18, Sáb 08–12, Dom fechado)
+        - Conflito com agendamentos existentes (pendente ou em_andamento)
+        - O `precoTotal` é capturado como snapshot do preço do serviço no momento da criação.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriarAgendamentoRequest'
+            example:
+              veiculoId: "uuid-veiculo"
+              servicoId: "uuid-servico"
+              agendadoPara: "2026-10-15T09:00:00"
+              observacoes: Chave no cofre
+      responses:
+        '201':
+          description: Agendamento criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agendamento'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/appointments/{id}/status:
+    patch:
+      tags: [Agendamentos]
+      summary: Atualizar status do agendamento
+      description: |
+        - **Cliente**: pode apenas cancelar agendamentos `pendente` próprios.
+        - **Admin**: pode alterar para qualquer status válido.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtualizarStatusRequest'
+            example:
+              status: concluido
+      responses:
+        '200':
+          description: Status atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agendamento'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/appointments/{id}:
+    delete:
+      tags: [Agendamentos]
+      summary: Excluir agendamento
+      description: Cliente exclui o próprio; admin pode excluir qualquer um.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204':
+          description: Agendamento excluído com sucesso
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+# ─────────────────────────────────────────────────────────────
+# COMPONENTS
+# ─────────────────────────────────────────────────────────────
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtido via POST /api/auth/login
+
+  # ── PARAMETERS ──────────────────────────────────────────────
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      description: UUID do recurso
+      schema:
+        type: string
+        format: uuid
+    Pagina:
+      name: pagina
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Número da página
+    Limite:
+      name: limite
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+      description: Itens por página (máx. 50)
+
+  # ── RESPONSES ───────────────────────────────────────────────
+  responses:
+    BadRequest:
+      description: Dados inválidos ou regra de negócio violada
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+    Unauthorized:
+      description: Token ausente, inválido ou expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+    Forbidden:
+      description: Perfil sem permissão para esta operação
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+
+  # ── SCHEMAS ─────────────────────────────────────────────────
+  schemas:
+
+    Erro:
+      type: object
+      properties:
+        mensagem:
+          type: string
+          example: Horário já ocupado. Escolha outro horário.
+
+    TipoVeiculo:
+      type: string
+      enum: [carro, moto, caminhao, suv]
+
+    StatusAgendamento:
+      type: string
+      enum: [pendente, em_andamento, concluido, cancelado]
+
+    PerfilUsuario:
+      type: string
+      enum: [cliente, admin]
+
+    # ── AUTH ──
+    LoginRequest:
+      type: object
+      required: [email, senha]
+      properties:
+        email:
+          type: string
+          format: email
+        senha:
+          type: string
+          minLength: 8
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT com expiração de 7 dias
+        usuario:
+          $ref: '#/components/schemas/Usuario'
+
+    # ── USUÁRIO ──
+    Usuario:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        email:
+          type: string
+          format: email
+        cpf:
+          type: string
+          example: "12345678909"
+        perfil:
+          $ref: '#/components/schemas/PerfilUsuario'
+        telefone:
+          type: string
+          nullable: true
+        criadoEm:
+          type: string
+          format: date-time
+        atualizadoEm:
+          type: string
+          format: date-time
+
+    UsuarioCriado:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        email:
+          type: string
+        perfil:
+          $ref: '#/components/schemas/PerfilUsuario'
+
+    CadastroUsuarioRequest:
+      type: object
+      required: [nome, email, cpf, senha]
+      properties:
+        nome:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        cpf:
+          type: string
+          description: CPF válido (algoritmo de dígitos verificadores), apenas números
+          example: "12345678909"
+        senha:
+          type: string
+          minLength: 8
+          description: "Mín. 8 chars: letra maiúscula, minúscula, número e caractere especial (@$!%*?&)"
+
+    AtualizacaoUsuarioRequest:
+      type: object
+      required: [nome]
+      properties:
+        nome:
+          type: string
+        telefone:
+          type: string
+          nullable: true
+        senha:
+          type: string
+          minLength: 8
+          description: Deixe em branco para não alterar a senha
+
+    PaginacaoUsuarios:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/Usuario'
+        total:
+          type: integer
+        pagina:
+          type: integer
+        totalPaginas:
+          type: integer
+
+    # ── VEÍCULO ──
+    Veiculo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        usuarioId:
+          type: string
+          format: uuid
+        marca:
+          type: string
+        modelo:
+          type: string
+        ano:
+          type: integer
+        placa:
+          type: string
+          example: ABC1D23
+        cor:
+          type: string
+        tipo:
+          $ref: '#/components/schemas/TipoVeiculo'
+        criadoEm:
+          type: string
+          format: date-time
+        atualizadoEm:
+          type: string
+          format: date-time
+
+    CriarVeiculoRequest:
+      type: object
+      required: [marca, modelo, ano, placa, cor, tipo]
+      properties:
+        marca:
+          type: string
+        modelo:
+          type: string
+        ano:
+          type: integer
+          minimum: 1900
+        placa:
+          type: string
+        cor:
+          type: string
+        tipo:
+          $ref: '#/components/schemas/TipoVeiculo'
+
+    AtualizarVeiculoRequest:
+      type: object
+      properties:
+        marca:
+          type: string
+        modelo:
+          type: string
+        ano:
+          type: integer
+        cor:
+          type: string
+        tipo:
+          $ref: '#/components/schemas/TipoVeiculo'
+
+    PaginacaoVeiculos:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/Veiculo'
+        total:
+          type: integer
+        pagina:
+          type: integer
+        totalPaginas:
+          type: integer
+
+    PaginacaoVeiculosAdmin:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/Veiculo'
+              - type: object
+                properties:
+                  usuario:
+                    type: object
+                    properties:
+                      nome:
+                        type: string
+                      email:
+                        type: string
+        total:
+          type: integer
+        pagina:
+          type: integer
+        totalPaginas:
+          type: integer
+
+    # ── SERVIÇO ──
+    Servico:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        descricao:
+          type: string
+        preco:
+          type: number
+          format: float
+          example: 89.90
+        duracao:
+          type: integer
+          description: Duração em minutos
+          example: 60
+        tiposVeiculo:
+          type: string
+          description: CSV dos tipos compatíveis
+          example: "carro,suv"
+        ativo:
+          type: boolean
+        criadoEm:
+          type: string
+          format: date-time
+        atualizadoEm:
+          type: string
+          format: date-time
+
+    CriarServicoRequest:
+      type: object
+      required: [nome, descricao, preco, duracao, tiposVeiculo]
+      properties:
+        nome:
+          type: string
+        descricao:
+          type: string
+        preco:
+          type: number
+          minimum: 0.01
+        duracao:
+          type: integer
+          minimum: 1
+          description: Duração em minutos
+        tiposVeiculo:
+          type: string
+          description: CSV de tipos (carro,moto,caminhao,suv)
+
+    AtualizarServicoRequest:
+      type: object
+      properties:
+        nome:
+          type: string
+        descricao:
+          type: string
+        preco:
+          type: number
+          minimum: 0.01
+        duracao:
+          type: integer
+          minimum: 1
+        tiposVeiculo:
+          type: string
+        ativo:
+          type: boolean
+
+    PaginacaoServicos:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/Servico'
+        total:
+          type: integer
+        pagina:
+          type: integer
+        totalPaginas:
+          type: integer
+
+    # ── AGENDAMENTO ──
+    Agendamento:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        usuarioId:
+          type: string
+          format: uuid
+        veiculoId:
+          type: string
+          format: uuid
+        servicoId:
+          type: string
+          format: uuid
+        agendadoPara:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/StatusAgendamento'
+        observacoes:
+          type: string
+          nullable: true
+        precoTotal:
+          type: number
+          format: float
+          description: Snapshot do preço no momento da criação
+        criadoEm:
+          type: string
+          format: date-time
+        atualizadoEm:
+          type: string
+          format: date-time
+
+    CriarAgendamentoRequest:
+      type: object
+      required: [veiculoId, servicoId, agendadoPara]
+      properties:
+        veiculoId:
+          type: string
+          format: uuid
+        servicoId:
+          type: string
+          format: uuid
+        agendadoPara:
+          type: string
+          format: date-time
+          description: "Deve estar dentro do horário de funcionamento"
+        observacoes:
+          type: string
+          nullable: true
+
+    AtualizarStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusAgendamento'
+
+    PaginacaoAgendamentos:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/Agendamento'
+              - type: object
+                properties:
+                  veiculo:
+                    $ref: '#/components/schemas/Veiculo'
+                  servico:
+                    $ref: '#/components/schemas/Servico'
+        total:
+          type: integer
+        pagina:
+          type: integer
+        totalPaginas:
+          type: integer
+
+    PaginacaoAgendamentosAdmin:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/Agendamento'
+              - type: object
+                properties:
+                  usuario:
+                    type: object
+                    properties:
+                      nome:
+                        type: string
+                      email:
+                        type: string
+                  veiculo:
+                    $ref: '#/components/schemas/Veiculo'
+                  servico:
+                    $ref: '#/components/schemas/Servico'
+        total:
+          type: integer
+        pagina:
+          type: integer
+        totalPaginas:
+          type: integer
