@@ -1,18 +1,39 @@
 import { Page } from '@playwright/test';
 
-// ============================================================
-//  Helpers compartilhados para os testes E2E
-// ============================================================
-
 export const ADMIN_EMAIL    = process.env.E2E_ADMIN_EMAIL    || 'admin@aquawash.com';
 export const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'Admin@123';
 
-/** Gera dados únicos para evitar conflitos entre execuções */
 export function uniqueSuffix(): string {
   return Date.now().toString().slice(-6);
 }
 
-/** Faz login via UI e aguarda redirecionamento */
+const VALID_CPFS = [
+  '349.749.030-04',
+  '594.267.810-30',
+  '271.875.462-11',
+  '141.477.793-01',
+  '460.396.177-48',
+  '319.034.725-55',
+  '472.554.666-64',
+  '597.974.213-17',
+  '728.705.577-52',
+  '664.414.951-04',
+  '996.337.553-79',
+  '323.753.104-97',
+  '996.592.403-17',
+  '494.237.771-47',
+  '559.794.478-90',
+  '935.411.347-80',
+  '153.509.460-56',
+];
+
+let cpfIndex = 0;
+export function uniqueCPF(): string {
+  // Combina índice com últimos dígitos do timestamp para variar entre rodadas
+  const offset = parseInt(Date.now().toString().slice(-3)) % VALID_CPFS.length;
+  return VALID_CPFS[(cpfIndex++ + offset) % VALID_CPFS.length];
+}
+
 export async function loginAs(page: Page, email: string, password: string): Promise<void> {
   await page.goto('/login');
   await page.getByLabel(/e-mail/i).fill(email);
@@ -20,15 +41,12 @@ export async function loginAs(page: Page, email: string, password: string): Prom
   await page.getByRole('button', { name: /entrar/i }).click();
 }
 
-/** Faz login como admin e aguarda dashboard admin */
 export async function loginAsAdmin(page: Page): Promise<void> {
   await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
   await page.waitForURL('**/admin**');
 }
 
-/** Faz logout */
 export async function logout(page: Page): Promise<void> {
-  // Tenta botão de logout no menu
   const logoutBtn = page.getByRole('button', { name: /sair/i });
   if (await logoutBtn.isVisible()) {
     await logoutBtn.click();

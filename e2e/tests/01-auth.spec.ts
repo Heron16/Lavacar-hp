@@ -60,11 +60,10 @@ test.describe('Cadastro de Usuário', () => {
 
     await page.getByLabel(/nome/i).fill(`Usuário Teste ${suffix}`);
     await page.getByLabel(/e-mail/i).fill(`teste${suffix}@gmail.com`);
-    await page.getByLabel(/cpf/i).fill('529.982.247-25');   // CPF válido
+    await page.getByLabel(/cpf/i).fill(uniqueCPF());
     await page.getByLabel(/senha/i).fill('Senha@123');
     await page.getByRole('button', { name: /cadastrar|criar conta/i }).click();
 
-    // Após cadastro deve ir para login ou dashboard
     await expect(page).toHaveURL(/\/(login|dashboard)/);
   });
 
