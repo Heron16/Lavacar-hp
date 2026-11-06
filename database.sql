@@ -15,14 +15,13 @@ CREATE TABLE IF NOT EXISTS `usuario` (
   `nome`         VARCHAR(255) NOT NULL,
   `email`        VARCHAR(255) NOT NULL,
   `senha`        VARCHAR(255) NOT NULL,
-  `cpf`          VARCHAR(14)  NOT NULL,
   `perfil`       ENUM('cliente','admin') NOT NULL DEFAULT 'cliente',
   `telefone`     VARCHAR(20)  NULL,
+  `foto_perfil`  VARCHAR(255) NULL,
   `criadoEm`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `atualizadoEm` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `usuario_email_unique` (`email`),
-  UNIQUE KEY `usuario_cpf_unique` (`cpf`)
+  UNIQUE KEY `usuario_email_unique` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tabela: servico
@@ -34,6 +33,7 @@ CREATE TABLE IF NOT EXISTS `servico` (
   `duracao`      INT            NOT NULL,
   `tiposVeiculo` VARCHAR(255)   NOT NULL DEFAULT 'carro',
   `ativo`        TINYINT(1)     NOT NULL DEFAULT 1,
+  `imagemUrl`    VARCHAR(255)   NULL,
   `criadoEm`     DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `atualizadoEm` DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)

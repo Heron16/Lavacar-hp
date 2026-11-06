@@ -1,33 +1,31 @@
-# Dependências
+
 node_modules/
 backend/node_modules/
 frontend/node_modules/
 e2e/node_modules/
 
-# Builds
+
 backend/dist/
 frontend/dist/
 
-# Variáveis de ambiente — NUNCA commitar
 .env
 backend/.env
 frontend/.env
 e2e/.env
 
-# Certificados SSL locais
+
 nginx/certs/*.pem
 nginx/certs/*.key
 nginx/certs/*.crt
 
-# Cobertura de testes
+
 backend/coverage/
 e2e/test-results/
 e2e/playwright-report/
 
-# Logs
 *.log
 npm-debug.log*
 
-# OS
+
 .DS_Store
 Thumbs.db
